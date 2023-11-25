@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ping Pong Game</title>
+    <style>
+        canvas {
+            background: #eee;
+            display: block;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ping Pong Game</h1><br>
+    <canvas id="pingPongCanvas" width="600" height="400"></canvas>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('pingPongCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let playerNumber;
+        const paddleWidth = 10;
+        const paddleHeight = 100;
+        const paddleSpeed = 4;
+        let myPaddleY = canvas.height / 2 - paddleHeight / 2;
+        let otherPaddleY = canvas.height / 2 - paddleHeight / 2;
+
+        socket.on('playerNumber', (num) => {
+            playerNumber = num;
+            document.addEventListener('keydown', keyDownHandler, false);
+        });
+
+        socket.on('roomFull', () => {
+            alert('The game room is full. Please try again later.');
+            window.location.reload();
+        });
+
+        function drawPaddle(x, y) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(x, y, paddleWidth, paddleHeight);
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPaddle(10, playerNumber === 1 ? myPaddleY : otherPaddleY);
+            drawPaddle(canvas.width - paddleWidth - 10, playerNumber === 2 ? myPaddleY : otherPaddleY);
+        }
+
+        function keyDownHandler(e) {
+            if (e.key === 'w' || e.key === 's') {
+                const newY = e.key === 'w' ? myPaddleY - paddleSpeed : myPaddleY + paddleSpeed;
+                if (newY >= 0 && newY <= canvas.height - paddleHeight) {
+                    myPaddleY = newY;
+                    socket.emit('paddleMove', myPaddleY);
+                }
+            }
+        }
+
+        socket.on('paddleUpdate', (data) => {
+            if (data.player !== playerNumber) {
+                otherPaddleY = data.y;
+            }
+        });
+
+        function gameLoop() {
+            update();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
