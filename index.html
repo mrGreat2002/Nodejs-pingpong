@@ -25,6 +25,21 @@
         const paddleSpeed = 4;
         let myPaddleY = canvas.height / 2 - paddleHeight / 2;
         let otherPaddleY = canvas.height / 2 - paddleHeight / 2;
+        let score = [0, 0]; // Player 1 and Player 2 scores
+
+        // Ball properties
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 7,
+            speedX: 2,
+            speedY: 2,
+            reset() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.speedX = -this.speedX;
+            }
+        };
 
         socket.on('playerNumber', (num) => {
             playerNumber = num;
@@ -41,10 +56,53 @@
             ctx.fillRect(x, y, paddleWidth, paddleHeight);
         }
 
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function updateScore() {
+            if (ball.x < 0) { // Ball missed left paddle
+                score[1]++; // Player 2 scores
+                ball.reset();
+            } else if (ball.x > canvas.width) { // Ball missed right paddle
+                score[0]++; // Player 1 scores
+                ball.reset();
+            }
+
+            // Check for game over
+            if (score[0] === 3 || score[1] === 3) {
+                alert(`Player ${score[0] === 3 ? 1 : 2} wins the game!`);
+                score = [0, 0]; // Reset scores
+            }
+        }
+
         function update() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawPaddle(10, playerNumber === 1 ? myPaddleY : otherPaddleY);
             drawPaddle(canvas.width - paddleWidth - 10, playerNumber === 2 ? myPaddleY : otherPaddleY);
+            drawBall();
+
+            // Ball movement
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            // Collision with top and bottom
+            if (ball.y < ball.radius || ball.y > canvas.height - ball.radius) {
+                ball.speedY = -ball.speedY;
+            }
+
+            // Paddle collision detection
+            if (ball.x < 20 && ball.y > myPaddleY && ball.y < myPaddleY + paddleHeight && playerNumber === 1) {
+                ball.speedX = -ball.speedX;
+            } else if (ball.x > canvas.width - 20 - paddleWidth && ball.y > otherPaddleY && ball.y < otherPaddleY + paddleHeight && playerNumber === 2) {
+                ball.speedX = -ball.speedX;
+            }
+
+            updateScore();
         }
 
         function keyDownHandler(e) {
