@@ -1,132 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Ping Pong Game</title>
     <style>
-        canvas {
-            background: #eee;
-            display: block;
-            margin: auto;
-        }
+        canvas { background: #eee; display: block; margin: auto; }
+        #scoreBoard { text-align: center; }
+        #startGameBtn, #resetGameBtn { margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>Ping Pong Game</h1><br>
-    <canvas id="pingPongCanvas" width="600" height="400"></canvas>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <div id="scoreBoard">Player 1: 0 | Player 2: 0</div>
+    <button id="startGameBtn" disabled>Start Game</button>
+    <button id="resetGameBtn" disabled>Reset Game</button>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const canvas = document.getElementById('pingPongCanvas');
-        const ctx = canvas.getContext('2d');
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const startGameBtn = document.getElementById('startGameBtn');
+            const resetGameBtn = document.getElementById('resetGameBtn');
+            const scoreBoard = document.getElementById('scoreBoard');
+            let paddleY = 150;
+            let ball;
+            let playerNumber;
+            let opponentPaddleY = 150;
+            const paddleWidth = 10;
+            const paddleHeight = 100;
+            const paddleSpeed = 10; // Speed of paddle movement
+            const socket = io();
 
-        let playerNumber;
-        const paddleWidth = 10;
-        const paddleHeight = 100;
-        const paddleSpeed = 4;
-        let myPaddleY = canvas.height / 2 - paddleHeight / 2;
-        let otherPaddleY = canvas.height / 2 - paddleHeight / 2;
-        let score = [0, 0]; // Player 1 and Player 2 scores
+            socket.on('playerNumber', (num) => {
+                playerNumber = num;
+                startGameBtn.disabled = false;
+            });
 
-        // Ball properties
-        const ball = {
-            x: canvas.width / 2,
-            y: canvas.height / 2,
-            radius: 7,
-            speedX: 2,
-            speedY: 2,
-            reset() {
-                this.x = canvas.width / 2;
-                this.y = canvas.height / 2;
-                this.speedX = -this.speedX;
-            }
-        };
+            socket.on('readyToStart', () => {
+                startGameBtn.disabled = false;
+            });
 
-        socket.on('playerNumber', (num) => {
-            playerNumber = num;
-            document.addEventListener('keydown', keyDownHandler, false);
-        });
+            socket.on('gameStarted', (gameState) => {
+                ball = gameState.ball;
+                startGameBtn.disabled = true;
+                resetGameBtn.disabled = false;
+                drawGame();
+            });
 
-        socket.on('roomFull', () => {
-            alert('The game room is full. Please try again later.');
-            window.location.reload();
-        });
+            socket.on('gameState', (state) => {
+                ball = state.ball;
+                updateScoreBoard(state.score);
+            });
 
-        function drawPaddle(x, y) {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(x, y, paddleWidth, paddleHeight);
-        }
+            socket.on('gameReset', (gameState) => {
+                ball = null;
+                paddleY = 150;
+                opponentPaddleY = 150;
+                playerNumber = undefined;
+                updateScoreBoard({ player1: 0, player2: 0 });
+                startGameBtn.disabled = false;
+                resetGameBtn.disabled = true;
+                ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+            });
 
-        function drawBall() {
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#000';
-            ctx.fill();
-            ctx.closePath();
-        }
+            socket.on('gameOver', (finalScore) => {
+                alert(`Game Over! Final Score - Player 1: ${finalScore.player1}, Player 2: ${finalScore.player2}`);
+                ball = null;
+                startGameBtn.disabled = false;
+                resetGameBtn.disabled = true;
+            });
 
-        function updateScore() {
-            if (ball.x < 0) { // Ball missed left paddle
-                score[1]++; // Player 2 scores
-                ball.reset();
-            } else if (ball.x > canvas.width) { // Ball missed right paddle
-                score[0]++; // Player 1 scores
-                ball.reset();
-            }
+            socket.on('paddleUpdate', (data) => {
+                if (socket.id !== data.playerId) {
+                    opponentPaddleY = data.y;
+                }
+            });
 
-            // Check for game over
-            if (score[0] === 3 || score[1] === 3) {
-                alert(`Player ${score[0] === 3 ? 1 : 2} wins the game!`);
-                score = [0, 0]; // Reset scores
-            }
-        }
+            function drawGame() {
+                if (!ball) return;
+                requestAnimationFrame(drawGame);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        function update() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawPaddle(10, playerNumber === 1 ? myPaddleY : otherPaddleY);
-            drawPaddle(canvas.width - paddleWidth - 10, playerNumber === 2 ? myPaddleY : otherPaddleY);
-            drawBall();
+                // Draw the ball
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, 7, 0, Math.PI * 2);
+                ctx.fill();
 
-            // Ball movement
-            ball.x += ball.speedX;
-            ball.y += ball.speedY;
-
-            // Collision with top and bottom
-            if (ball.y < ball.radius || ball.y > canvas.height - ball.radius) {
-                ball.speedY = -ball.speedY;
-            }
-
-            // Paddle collision detection
-            if (ball.x < 20 && ball.y > myPaddleY && ball.y < myPaddleY + paddleHeight && playerNumber === 1) {
-                ball.speedX = -ball.speedX;
-            } else if (ball.x > canvas.width - 20 - paddleWidth && ball.y > otherPaddleY && ball.y < otherPaddleY + paddleHeight && playerNumber === 2) {
-                ball.speedX = -ball.speedX;
-            }
-
-            updateScore();
-        }
-
-        function keyDownHandler(e) {
-            if (e.key === 'w' || e.key === 's') {
-                const newY = e.key === 'w' ? myPaddleY - paddleSpeed : myPaddleY + paddleSpeed;
-                if (newY >= 0 && newY <= canvas.height - paddleHeight) {
-                    myPaddleY = newY;
-                    socket.emit('paddleMove', myPaddleY);
+                // Draw paddles for both players
+                if (playerNumber === 1) {
+                    // Player 1 sees themselves on the left
+                    ctx.fillRect(10, paddleY, paddleWidth, paddleHeight); // Player's paddle
+                    ctx.fillRect(canvas.width - paddleWidth - 10, opponentPaddleY, paddleWidth, paddleHeight); // Opponent's paddle
+                } else {
+                    // Player 2 sees themselves on the right
+                    ctx.fillRect(canvas.width - paddleWidth - 10, paddleY, paddleWidth, paddleHeight); // Player's paddle
+                    ctx.fillRect(10, opponentPaddleY, paddleWidth, paddleHeight); // Opponent's paddle
                 }
             }
-        }
 
-        socket.on('paddleUpdate', (data) => {
-            if (data.player !== playerNumber) {
-                otherPaddleY = data.y;
+            function updateScoreBoard(score) {
+                scoreBoard.innerText = `Player 1: ${score.player1} | Player 2: ${score.player2}`;
             }
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'ArrowUp' && paddleY > 0) {
+                    paddleY -= paddleSpeed;
+                } else if (event.key === 'ArrowDown' && paddleY < canvas.height - paddleHeight) {
+                    paddleY += paddleSpeed;
+                }
+                socket.emit('paddleMove', { y: paddleY });
+            });
+
+            startGameBtn.addEventListener('click', () => {
+                socket.emit('startGame');
+            });
+
+            resetGameBtn.addEventListener('click', () => {
+                 location.reload();
+            });
         });
-
-        function gameLoop() {
-            update();
-            requestAnimationFrame(gameLoop);
-        }
-
-        gameLoop();
     </script>
 </body>
 </html>
